@@ -1,4 +1,4 @@
-﻿
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5587,9 +5587,9 @@ function renderBOMJobs(jobs) {
     const card = document.createElement("div");
     card.className = "job-card";
     card.style.cssText = `position: relative; border: 1px solid #ddd; border-radius: 12px; overflow: hidden; margin-bottom: 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); background: #fff; text-align: center;`;
-
-    const isPoster = currentUser && (job.postedBy === currentUser.uid);
-    const isVerified = !!job.verified;
+const isPoster = currentUser && (job.posterUid === currentUser.uid);
+const isAdmin = currentUser && ["mashabiki@teacherswapskenya.com","sironga1@teacherswapskenya.com","admin1@teacherswapskenya.com"].includes(currentUser.email);
+const isVerified = !!job.isVerified;
     const badge = isVerified ? `<div class="verified-badge"><i class="fas fa-check-circle"></i> Verified</div>` : "";
     const verifyButton = (!isVerified && isAdmin) ? `<button onclick="adminVerifyItem('job','${job.id}')" style="background:#4CAF50; color:white; border:none; border-radius:5px; padding:6px 12px; cursor:pointer;">✅ Verify Now (Admin)</button>` : "";
 
@@ -5751,7 +5751,6 @@ if (isPoster || isAdmin || hasAccess) {
   });
 }
 
-
 // ✅ Boost Job
 async function boostJob(jobId) { 
   const spinner = document.getElementById("loadingSpinner");
@@ -5766,7 +5765,7 @@ async function boostJob(jobId) {
     }
 
     const data = doc.data();
-    const postedBy = data.postedBy; // UID of poster
+    const posterUid = data.posterUid; // ✅ Correct UID field
 
     const currentUser = firebase.auth().currentUser;
     if (!currentUser) {
@@ -5775,7 +5774,7 @@ async function boostJob(jobId) {
     }
 
     // Poster: trigger payment first
-    if (currentUser.uid === postedBy) {
+    if (currentUser.uid === posterUid) {
       showPaymentModalFor('boost', 350, jobId, data.jobType, async () => {
         await applyBoost(jobRef, data);
       });
@@ -5800,8 +5799,8 @@ async function applyBoost(jobRef, data) {
 
   await jobRef.update({
     isBoosted: true,
-    boostExpiry: firebase.firestore.Timestamp.fromDate(boostExpiry),
-    timestamp: new Date() // Push to top
+    boostExpiry: firebase.firestore.Timestamp.fromDate(boostExpiry)
+    // ✅ timestamp removed to prevent Firestore rules errors
   });
 
   showCustomAlert("✅ Job boosted successfully.", "success");
@@ -5817,6 +5816,7 @@ async function applyBoost(jobRef, data) {
     message: `🚀 Job "${data.jobType}" boosted by ${firebase.auth().currentUser.displayName || firebase.auth().currentUser.email}`
   });
 }
+
 // ✅ Verify Job
 async function verifyJob(jobId) {
   const spinner = document.getElementById("loadingSpinner");
@@ -5831,6 +5831,8 @@ async function verifyJob(jobId) {
     }
 
     const data = doc.data();
+    const posterUid = data.posterUid; // ✅ Correct UID field
+
     const currentUser = firebase.auth().currentUser;
     if (!currentUser) {
       showCustomAlert("❌ You need to login first.", "error");
@@ -5838,35 +5840,29 @@ async function verifyJob(jobId) {
     }
 
     // Poster must pay Ksh 250 for verification
-    if (currentUser.uid === data.postedBy) {
+    if (currentUser.uid === posterUid) {
       const verificationLabel = "Job Verification";
 
       // Show payment modal for verification
-      showPaymentModalFor("verify", 250, jobId, verificationLabel);
+      showPaymentModalFor("verify", 250, jobId, verificationLabel, async () => {
+        await applyVerification(jobRef);
 
-      const checkPaid = setInterval(async () => {
-        const paidKey = `paidForVerification-${jobId}`;
-        if (localStorage.getItem(paidKey) === "yes") {
-          clearInterval(checkPaid);
-          await applyVerification(jobRef);
-
-          // ✅ Send admin notification
-          try {
-            const notifRef = db.collection("adminNotifications").doc();
-            await notifRef.set({
-              type: "Job Verification",
-              userId: currentUser.uid,
-              message: `💰 ${currentUser.email} paid Ksh 250 for job verification (${data.jobType}).`,
-              timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            });
-            console.log("Admin notification sent for job verification");
-          } catch (error) {
-            console.error("Failed to send admin notification:", error);
-          }
-
-          closeUniversalModal();
+        // ✅ Send admin notification
+        try {
+          const notifRef = db.collection("adminNotifications").doc();
+          await notifRef.set({
+            type: "Job Verification",
+            userId: currentUser.uid,
+            message: `💰 ${currentUser.email} paid Ksh 250 for job verification (${data.jobType}).`,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log("Admin notification sent for job verification");
+        } catch (error) {
+          console.error("Failed to send admin notification:", error);
         }
-      }, 3000);
+
+        closeUniversalModal();
+      });
 
       return;
     }
@@ -5888,7 +5884,6 @@ async function applyVerification(jobRef) {
   showCustomAlert("✅ Job verified successfully.", "success");
   loadBOMJobs(); // refresh the list
 }
-
 
 // ✅ Payment Modal (dynamic for Boost or Verify)
 function showPaymentModalFor(type, amount, jobId, jobType, onSuccess) {
