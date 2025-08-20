@@ -5414,60 +5414,56 @@ document.getElementById("bomJobForm").addEventListener("submit", async e => {
   document.getElementById("bomDate").value = fullDate;
   document.getElementById("bomPostedBy").value = capitalize(firstName);
 
-  // 🔹 Contact + Phone handling (always preserve phone)
+  // 🔹 Contact + Phone handling
   const contactInput = document.getElementById("bomContact")?.value.trim() || "";
   const phone = document.getElementById("bomPhone")?.value.trim() || "";
   let contact = contactInput || phone;
 
-  // If contact input is a link, keep it as contact but preserve phone
   if (contactInput.startsWith("http") || contactInput.startsWith("www")) {
     contact = contactInput;
   }
 
-  // 🔹 Job object with fixed jobKey
+  // 🔹 Job object
   const job = {
     organization: document.getElementById("bomOrg").value.trim(),
     jobType: document.getElementById("bomJobType").value.trim(),
-    phone: phone,             // ✅ Always stored for admin
-    contact: contact,         // ✅ Link or phone (public safe)
+    phone: phone,
+    contact: contact,
     subCounty: document.getElementById("bomSubCounty").value,
     county: document.getElementById("bomCounty").value,
     salaryRange: document.getElementById("bomSalaryRange").value.trim(),
     datePosted: fullDate,
     postedBy: capitalize(firstName),
-    posterUid: currentUser.uid,           // 👈 track poster
-    jobKey: "dlTvfkiuv1ROFNa4HPVqWgs82Dh2", // ✅ fixed job key
+    posterUid: currentUser.uid,
+    jobKey: "dlTvfkiuv1ROFNa4HPVqWgs82Dh2",
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  // Show loading spinner
   document.getElementById("loadingSpinner").style.display = "flex";
 
   try {
-    // ✅ Save job to Firestore
+    // ✅ Save job to BOM collection
     await bomRef.add(job);
 
-    // ✅ Success message
     showCustomAlert("✅ Job posted successfully!", "success");
-
-    // ✅ Reset form and reload jobs
     document.getElementById("bomJobForm").reset();
     loadBOMJobs();
-
-    // ✅ Notify relevant service providers
     notifyMatchingServiceProviders(job);
 
-    // ✅ Admin Notification (always includes phone & jobKey)
+    // ✅ Admin Notification (formatted nicely)
+    const adminMessage = `New job posted: ${job.jobType} by ${job.organization}, Salary: ${job.salaryRange}, Contact: ${job.contact || job.phone}, County: ${job.county}`;
+    
     await db.collection("adminNotifications").add({
       type: "BOM Job Post",
+      message: adminMessage,
       jobType: job.jobType,
       organization: job.organization,
       salaryRange: job.salaryRange,
-      phone: job.phone,
       contact: job.contact || null,
+      phone: job.phone,
       county: job.county,
-      posterUid: currentUser.uid,  // track poster
-      jobKey: job.jobKey,          // fixed key
+      posterUid: currentUser.uid,
+      jobKey: job.jobKey,
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       read: false
     });
@@ -5488,6 +5484,13 @@ document.getElementById("bomJobForm").addEventListener("submit", async e => {
     document.getElementById("loadingSpinner").style.display = "none";
   }
 });
+
+// ✅ Utility to capitalize first letter
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+
 
 
 // ✅ Notify Matching Service Providers (no phone number)
@@ -5515,10 +5518,7 @@ County: ${job.county}`;
 }
 
 
-// ✅ Utility to capitalize first letter
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
+
 
 let bomJobsCache = [];
 let jobToDeleteId = null;
@@ -10666,16 +10666,19 @@ function resetMarketFilters() {
 
 function showPaymentModalFor(type, amount, itemId, itemName) {
   // ✅ Decide modal title dynamically
-  let titleText = "Pay to Unlock ";
+  let titleText = "Pay to Unlock";
 
-  if (type === "boost") {
-    titleText = "Pay to Boost";  // For boost, change title
-  }
-  else if (type === "unlock") {
-    titleText = "Pay to Unlock Contacts";  // For unlock contacts, change title
-  }
-  else if (type === "swapVerification" || type === "serviceVerification" || type === "marketVerification" || type === "soulmateVerification") {
-    titleText = "Pay for Verification";  // For verification, change title to "Pay for Verification"
+  // Normalize type to lowercase for safety
+  const normalizedType = type.toLowerCase();
+
+  if (normalizedType === "boost") {
+    titleText = "Pay to Boost";  // For boost
+  } 
+  else if (normalizedType === "unlock") {
+    titleText = "Pay to Unlock Contacts";  // For unlock contacts
+  } 
+  else if (normalizedType.endsWith("verification")) {
+    titleText = "Pay for Verification";  // For all verification types
   }
 
   const modalHTML = `
